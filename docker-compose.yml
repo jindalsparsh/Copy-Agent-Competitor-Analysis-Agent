@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  content-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: content-pipeline:latest
+    container_name: content-pipeline
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8000}:8000"
+
+    environment:
+      # ── Anthropic ────────────────────────────────────────────────────────────
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-opus-4-6}"
+      CLAUDE_MAX_TOKENS: "${CLAUDE_MAX_TOKENS:-4096}"
+      CLAUDE_TEMPERATURE: "${CLAUDE_TEMPERATURE:-0.3}"
+
+      # ── Google ───────────────────────────────────────────────────────────────
+      # Path inside the container (matches the volume mount below)
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/service_account.json
+      GOOGLE_SHEET_ID: "${GOOGLE_SHEET_ID}"
+      GOOGLE_SHEET_RANGE: "${GOOGLE_SHEET_RANGE:-Sheet1!A1:Z1000}"
+      GOOGLE_DRIVE_FILE_ID: "${GOOGLE_DRIVE_FILE_ID}"
+      GOOGLE_DOC_ID: "${GOOGLE_DOC_ID}"
+
+      # ── Pipeline ─────────────────────────────────────────────────────────────
+      PROCESS_STATUS_FILTER: "${PROCESS_STATUS_FILTER:-READY}"
+      UPDATE_SHEET_STATUS: "${UPDATE_SHEET_STATUS:-true}"
+      PROCESSED_STATUS_VALUE: "${PROCESSED_STATUS_VALUE:-DONE}"
+
+      # ── Scheduling ───────────────────────────────────────────────────────────
+      ENABLE_SCHEDULER: "${ENABLE_SCHEDULER:-false}"
+      SCHEDULE_CRON: "${SCHEDULE_CRON:-0 8 * * 1-5}"
+
+      # ── Application ──────────────────────────────────────────────────────────
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      PORT: "${PORT:-8000}"
+
+    volumes:
+      # Mount the service account JSON as a read-only secret.
+      # Replace ./secrets/service_account.json with your actual file path.
+      - ./secrets/service_account.json:/secrets/service_account.json:ro
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Resource limits — adjust for your workload
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
